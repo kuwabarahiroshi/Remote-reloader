@@ -1,0 +1,13 @@
+{
+	"name": "RemoteReloader",
+	"version": "0.1",
+	"description": "relode current tab by signal from a server",
+	"browser_action": {
+		"default_icon": "/assets/img/icon_off.png",
+		"popup": "/views/popup.html"
+	},
+	"permissions": [
+		"tabs", "*://*/*", "notifications"
+	],
+    "background_page": "/views/background.html"
+}
