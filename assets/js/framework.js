@@ -1,7 +1,7 @@
 ;(function() {
-var def = use_simple_class_declaration();
+var def = require_joo();
 var isArray = Array.isArray || function(a) {return a instanceof Array};
-var is_array = isArray;
+
 function merge() {
     var ret = {}, prop, obj, i, l;
     for (i = 0, l = arguments.length; i < l; i++)
@@ -166,69 +166,9 @@ it.provides({
         subject._boundMethods = subject._boundMethods || {};
 
         return subject._boundMethods[method] || (subject._boundMethods[method] = function() {
-            return subject[method](arguments);
+            if (!subject[method]) throw new Error(subject + '.' + method + '() is not defined.');
+            return subject[method].apply(subject, arguments);
         });
-    }
-});
-
-def('Configurable').as('app.framework.Configurable').
-it.provides({
-    configure: function(config) {
-        this.config = merge(this._default, config);
-    }
-});
-
-function Deferred() {
-    this.callbacks = [];
-    this.fails = [];
-    this.status = Deferred.status.UNRESOLVED;
-}
-def(Deferred).as('app.framework.Deferred').
-it.hasStatic({
-    status: {
-        UNRESOLVED: 'unresolved',
-        RESOLVED: 'resolved',
-        REJECTED: 'rejected'
-    }
-}).
-it.provides({
-    then: function(fn) {
-        if (this.status == Deferred.status.RESOLVED) fn.apply(null, this.resolvedArgs)
-        else if (this.status == Deferred.status.UNRESOLVED) this.callbacks.push(fn);
-        return this;
-    },
-    fail: function(fn) {
-        if (this.status == Deferred.status.REJECTED) fn.apply(null, this.rejectedArgs)
-        else if (this.status == Deferred.status.UNRESOLVED) this.fails.push(fn);
-        return this;
-    },
-    resolve: function() {
-        if (this.status != Deferred.status.UNRESOLVED) return;
-        var args = arguments, that = this;
-        this.resolvedArgs = args;
-        this.status = Deferred.status.RESOLVED;
-        this.callbacks.forEach(function(fn) {
-            if (fn.isCalled) return;
-            fn.isCalled = true;
-            fn.apply(null, args);
-        });
-    },
-    reject: function() {
-        if (this.status != Deferred.status.UNRESOLVED) return;
-        var args = arguments, that = this;
-        this.rejectedArgs = args;
-        this.status = Deferred.status.REJECTED;
-        this.fails.forEach(function(fn) {
-            if (fn.isCalled) return;
-            fn.isCalled = true;
-            fn.apply(null, args);
-        });
-    },
-    isResolved: function() {
-        return this.status == Deferred.status.RESOLVED;
-    },
-    isRejected: function() {
-        return this.status == Deferred.status.REJECTED;
     }
 });
 
@@ -253,12 +193,16 @@ it.provides({
     }
 });
 
-
-function ViewController() {}
-def(ViewController).as('app.framework.ViewController').
-it.borrows(BoundMethod).
+def(function(ms) {
+    this.timer = setInterval(this.bound('tick'), ms);
+}).as('app.framework.Timer').
+it.borrows(app.framework.EventEmitter, app.framework.BoundMethod).
 it.provides({
-    container: app.framework.DIContainer.getInstance()
+    tick: function() {
+        this.emit('tick');
+    },
+    destroy: function() {
+        clearInterval(this.timer);
+    }
 });
-
 })();

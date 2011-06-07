@@ -2,13 +2,15 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <script type="text/javascript" src="/assets/js/mvc.js"></script>
+    <script type="text/javascript" src="/assets/js/joo.js"></script>
+    <script type="text/javascript" src="/assets/js/framework.js"></script>
     <script type="text/javascript" src="/assets/js/app.js"></script>
     <script type="text/javascript">
 var socketManager;
 function getSocketManager() {
-    return socketManager || (socketManager = new SocketManager());
+    return socketManager || (socketManager = new app.model.SocketManager());
 }
+var app = new app.controller.BackgroundViewController(getSocketManager()).route().run();
     </script>
 </head>
 </html>

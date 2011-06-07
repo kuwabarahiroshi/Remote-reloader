@@ -1,0 +1,1 @@
+/home/kuwabara/gitrepo/joo/src/joo.js

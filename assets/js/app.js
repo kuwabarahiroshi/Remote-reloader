@@ -1,16 +1,11 @@
-// url.value = localStorage.getItem('io.sandbox.remoteReloader.url') || url.value;
-
-// b.addEventListener('click', function() {
-//     chrome.extension.getBackgroundPage().createConnection().then(onConnection);
-// }, false);
 (function() {
-var def = use_simple_class_declaration(),
+var def = require_joo(),
     EventEmitter = app.framework.EventEmitter,
-    BoundMethod = app.framework.BoundMethod,
-    Configurable = app.framework.Configurable;
+    BoundMethod = app.framework.BoundMethod;
 
 function SocketManager() {
     this.socket = null;
+    this.reloadUrl = null;
 }
 def(SocketManager).as('app.model.SocketManager').
 it.borrows(EventEmitter, BoundMethod).
@@ -18,11 +13,15 @@ it.provides({
     isAlive: function() {
         return (this.socket && this.socket.readyState == WebSocket.OPEN);
     },
+    getReloadUrl: function() {
+        return this.reloadUrl;
+    },
     connect: function(url) {
         try {
             this.socket = new WebSocket(url);
         } catch (e) {
             this.emit('error');
+            this.reloadUrl = null;
             return;
         }
         this.socket.addEventListener('error', this.bound('onError'), false);
@@ -30,7 +29,13 @@ it.provides({
         this.socket.addEventListener('close', this.bound('onClose'), false);
     },
     close: function() {
+        this.socket.close();
+        this.reloadUrl = null;
         delete this.socket;
+        this.emit('close');
+    },
+    send: function(msg) {
+        if (this.isAlive()) this.socket.send(msg);
     },
     onOpen: function(event) {
         this.reloadUrl = event.data;
@@ -51,79 +56,60 @@ it.provides({
     }
 });
 
-function ButtonView(id) {
-    this.button = document.getElementById(id);
+function ButtonView() {
+    this.button = document.getElementById('toggle_button');
+    this.button.addEventListener('click', this.bound('toggleButtonClicked'));
     this.state = ButtonView.STATE.OFF;
-    this.button.addEventListener('click', this.bound('toggle'), false);
 }
 def(ButtonView).as('app.view.ButtonView').
+it.borrows(EventEmitter, BoundMethod).
 it.hasStatic({
     STATE: {
         ON: 1,
         OFF: 0
     }
 }).
-it.borrows(EventEmitter, BoundMethod, Configurable).
 it.provides({
-    switchTurnOn: function() {
+    turnOn: function() {
         this.state = ButtonView.STATE.ON;
-        this.draw();
-        this.emit('switchon');
+        this.button.title = 'Click to disable.';
+        this.button.className = 'on';
         return this;
     },
-    switchTurnOff: function() {
+    turnOff: function() {
         this.state = ButtonView.STATE.OFF;
-        this.draw();
-        this.emit('switchoff');
-        return this;
-    },
-    stateTurnOn: function() {
-        this.state = ButtonView.STATE.ON;
-        this.draw();
-        return this;
-    },
-    stateTurnOff: function() {
-        this.state = ButtonView.STATE.OFF;
-        this.draw();
-        return this;
-    }
-    draw: function() {
-        if (this.state == ButtonView.STATE.ON) {
-            this.button.title = 'Click to disable.';
-            this.button.className = 'on';
-        } else {
-            this.button.title = 'Click to enable.';
-            this.button.className = 'off';
-        }
+        this.button.title = 'Click to enable.';
+        this.button.className = 'off';
         return this;
     },
     toggle: function() {
-        return this.state === ButtonView.STATE.ON ? this.switchOff() : this.switchOn();
+        return this.state === ButtonView.STATE.ON ? this.turnOff() : this.turnOn();
+    },
+    toggleButtonClicked: function() {
+        this.emit('toggle', !this.state);
     }
 });
 
-function URLView(config) {
-    this.configure(config);
-    this.box = document.getElementById(this.config.urlbox_id);
-    this.icon = document.getElementById(this.config.icon_id);
-    this.icon.addEventListener('click', function(event) {this.emit('icon_clicked', event);});
-    this.init();
+function URLView() {
+    this.box = document.getElementById('reload_url');
+    this.box.addEventListener('click', this.bound('boxClicked'));
+    this.icon = document.getElementById('clipboard_icon');
+    this.icon.addEventListener('click', this.bound('iconClicked'));
 }
 def(URLView).as('app.view.URLView').
-it.borrows(EventEmitter, Configurable)
+it.borrows(EventEmitter, BoundMethod).
 it.provides({
-    _default: {
-        urlbox_id: 'reload_url',
-        icon_id: 'clipboard_icon'
-    },
     fill: function(url) {
+        if (!url) return;
         this.box.value = url.toString();
+        this.box.disabled = false;
         this.icon.style.display = 'block';
-        this.emit('filled');
+        this.emit('filled', url);
         return this;
     },
     empty: function() {
         this.box.value = '';
+        this.box.disabled = true;
         this.icon.style.display = 'none';
         this.emit('emptied');
         return this;
@@ -134,8 +120,12 @@ it.provides({
         return this;
     },
     copy: function() {
-        this.emit('copied');
-        return this;
+    },
+    boxClicked: function() {
+        if (this.box.value) this.emit('copy');
+    },
+    iconClicked: function() {
+        this.emit('copy');
     }
 });
 
@@ -144,58 +134,99 @@ function PopupViewController() {
     this.socketManager = chrome.extension.getBackgroundPage().getSocketManager();
 
     // views
-    this.button = this.container.get('view.button');
-    this.url = this.container.get('view.url');
-
-    // initialize
-    this.init();
-
-    // routing
-    this.route();
+    this.button = new app.view.ButtonView();
+    this.url = new app.view.URLView();
 }
 def(PopupViewController).as('app.controller.PopupViewController').
 it.borrows(BoundMethod).
 it.provides({
-    init: function() {
-        this.socketManager.isAlive() ? this.button.stateTurnOn() : this.button.stateTurnOff();
-        this.url.fill(this.socketManager.getReloadUrl());
-    },
     route: function() {
-        this.button.on('switchon', this.bound('switchOnActon'));
-        this.button.on('switchoff', this.bound('switchOffAction'));
+        this.button.on('toggle', this.bound('toggleAction'));
         this.url.on('filled', this.bound('urlFilledAction'));
         this.url.on('emptied', this.bound('urlEmptiedAction'));
         this.url.on('selected', this.bound('urlSelectedAction'));
-        this.socketManager.on('open', this.bound('socketOpendAction'));
+        this.url.on('copy', this.bound('copyAction'));
+        this.socketManager.on('open', this.bound('socketOpenAction'));
         this.socketManager.on('message', this.bound('socketMessageAction'));
         this.socketManager.on('error', this.bound('socketErrorAction'));
         this.socketManager.on('close', this.bound('socketClosedAction'));
+        return this;
     },
-    switchOnAction: function() {
-        this.socketManager.connect(this.container.get('socket.url'));
+    run: function() {
+        if (this.socketManager.isAlive()) {
+            this.button.turnOn();
+            this.url.fill(this.socketManager.getReloadUrl());
+        } else {
+            this.button.turnOff();
+            this.url.empty();
+        }
+        return this;
     },
-    switchOffAction: function() {
-        this.socketManager.close();
+    toggleAction: function(state) {
+        this.button.toggle();
+        if (state) this.socketManager.connect('ws://sandbox.io:8800/');
+        else this.socketManager.close();
     },
+    copyAction: function() {
+        this.url.select();
+        this.url.copy();
+    },
+    urlEmptiedAction: function() {},
+    urlFilledAction: function(url) {
+    },
+    urlSelectedAction: function() {},
     socketOpenAction: function() {
         this.url.fill(this.socketManager.getReloadUrl());
     },
     socketMessageAction: function() {
-        chrome.tabs.getSelected(null, function(tab) {
-            chrome.tabs.executeScript(tab.id, {code: 'location.reload()'});
-        });
     },
     socketErrorAction: function() {
+        this.button.turnOff();
+        this.url.empty();
     },
     socketClosedAction: function() {
-        webkitNotifications.createHTMLNotification('notification.html').show();
-        chrome.browserAction.setIcon({path: 'icon_on.png'});
-        chrome.browserAction.setIcon({path: 'icon_off.png'});
+        this.button.turnOff();
+        this.url.empty();
+        //webkitNotifications.createHTMLNotification('notification.html').show();
     }
 });
 
-PopupViewController.prototype = Object.create(Configurable, UsingBoundMethod, {
+
+
+function BackgroundViewController(socketManager) {
+    this.socketManager = socketManager;
+    this.timer = new app.framework.Timer(60000);
+}
+def(BackgroundViewController).as('app.controller.BackgroundViewController').
+it.borrows(BoundMethod).
+it.provides({
+    route: function() {
+        this.socketManager.on('open', this.bound('onOpen'));
+        this.socketManager.on('close', this.bound('onClose'));
+        this.socketManager.on('error', this.bound('onError'));
+        this.socketManager.on('message', this.bound('onMessage'));
+        this.timer.on('tick', this.bound('heartBeat'));
+        return this;
+    },
+    run: function() {
+        return this;
+    },
+    heartBeat: function() {
+        this.socketManager.send('heart beat');
+    },
+    onOpen: function() {
+        chrome.browserAction.setIcon({path: '/assets/img/icon_on.png'});
+    },
+    onClose: function() {
+        chrome.browserAction.setIcon({path: '/assets/img/icon_off.png'});
+    },
+    onError: function() {
+        chrome.browserAction.setIcon({path: '/assets/img/icon_off.png'});
+    },
+    onMessage: function() {
+        chrome.tabs.getSelected(null, function(tab) {
+            chrome.tabs.executeScript(tab.id, {code: 'location.reload()'});
+        });
+    }
 });
 })();
-
-

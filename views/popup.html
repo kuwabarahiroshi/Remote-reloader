@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <link rel="stylesheet" type="text/css" href="/assets/css/popup.css" />
-    <script type="text/javascript" src="/assets/js/class.js"></script>
+    <script type="text/javascript" src="/assets/js/joo.js"></script>
     <script type="text/javascript" src="/assets/js/framework.js"></script>
     <script type="text/javascript" src="/assets/js/app.js"></script>
 </head>
@@ -13,20 +13,12 @@
         <input type="button" id="toggle_button" class="off" title="click to enable" />
     </section>
     <section class="display_pane">
-        <input type="text" id="reload_url" placeholder="Click the above button, then your reload url will be here." disabled="" />
+        <input type="text" id="reload_url" placeholder="Click the above button, then your reload url will be here." disabled="" readonly="" />
         <img src="/assets/img/clipboard-sign.png" alt="clipboard" title="copy to clipboard" id="clipboard_icon" />
     </section>
 </div>
 <script type="text/javascript">
-    app.framework.DIContainer.getInstance().register({
-        ''
-    });
-    new PopupViewController({
-        id: {
-button: 'toggle_button',
-url_box: 'reload_url'
-        }
-    });
+new app.controller.PopupViewController().route().run();
 </script>
 </body>
 </html>
