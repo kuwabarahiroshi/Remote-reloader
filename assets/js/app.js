@@ -11,22 +11,26 @@ def(SocketManager).as('app.model.SocketManager').
 it.borrows(EventEmitter, BoundMethod).
 it.provides({
     isAlive: function() {
-        return (this.socket && this.socket.readyState == WebSocket.OPEN);
+        return (this.socket && this.socket.socket.open);
     },
     getReloadUrl: function() {
         return this.reloadUrl;
     },
     connect: function(url) {
+        var that = this
+            , socket;
         try {
-            this.socket = new WebSocket(url);
+            socket = this.socket = io.connect(url);
         } catch (e) {
             this.emit('error');
             this.reloadUrl = null;
             return;
         }
-        this.socket.addEventListener('error', this.bound('onError'), false);
-        this.socket.addEventListener('message', this.bound('onOpen'), false);
-        this.socket.addEventListener('close', this.bound('onClose'), false);
+        socket.on('connect', function() {
+            socket.on('error', that.bound('onError'));
+            socket.on('message', that.bound('onOpen'));
+            socket.on('close', that.bound('onClose'));
+        });
     },
     close: function() {
         this.socket.close();
@@ -37,11 +41,11 @@ it.provides({
     send: function(msg) {
         if (this.isAlive()) this.socket.send(msg);
     },
-    onOpen: function(event) {
-        this.reloadUrl = event.data;
-        this.socket.removeEventListener('message', this.bound('onOpen'));
-        this.socket.addEventListener('message', this.bound('onMessage'), false);
-        this.emit('open', event);
+    onOpen: function(msg) {
+        this.reloadUrl = msg;
+        this.socket.removeListener('message', this.bound('onOpen'));
+        this.socket.on('message', this.bound('onMessage'));
+        this.emit('open', msg);
     },
     onError: function(event) {
         this.reloadUrl = null;
@@ -153,6 +157,7 @@ it.provides({
         return this;
     },
     run: function() {
+        console.log(this.socketManager);
         if (this.socketManager.isAlive()) {
             this.button.turnOn();
             this.url.fill(this.socketManager.getReloadUrl());
@@ -164,7 +169,7 @@ it.provides({
     },
     toggleAction: function(state) {
         this.button.toggle();
-        if (state) this.socketManager.connect('ws://sandbox.io:8800/');
+        if (state) this.socketManager.connect('http://dev.sandbox.io:8800');
         else this.socketManager.close();
     },
     copyAction: function() {
